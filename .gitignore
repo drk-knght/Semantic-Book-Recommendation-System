@@ -1,2 +1,3 @@
 ./temp_files
-./chroma_db
+chroma_db/
+*.csv

@@ -45,11 +45,12 @@ else:
         "Please ensure the database exists before running this application."
     )
 
-# Initialize LLM for generating explanations
+# Initialize LLM for generating explanations and query understanding
 # Using Flan-T5-large model from HuggingFace (lightweight and efficient)
-print("Loading LLM for explanations...")
+print("Loading LLM for explanations and query understanding...")
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 explanation_llm = None
+query_understanding_llm = None
 
 try:
     device_id = 0 if device == "mps" else -1
@@ -58,11 +59,14 @@ try:
         model="google/flan-t5-large",
         device=device_id
     )
+    # Use the same model for query understanding
+    query_understanding_llm = explanation_llm
     print("Loaded Flan-T5-large model successfully!")
 except Exception as e:
     print(f"Could not load Flan-T5-large model: {e}")
     explanation_llm = None
-    print("Warning: LLM not available. Explanations will use template-based fallback.")
+    query_understanding_llm = None
+    print("Warning: LLM not available. Explanations and query understanding will use fallback methods.")
 
 # Emotion-based sorting configuration
 emotion_sort_map = {
@@ -74,6 +78,135 @@ emotion_sort_map = {
 }
 
 
+def understand_query(user_query: str, enable_expansion: bool = True) -> dict:
+    """
+    Analyze and understand the user's query to extract intent, themes, and improve search.
+    
+    Args:
+        user_query: The original user query
+        enable_expansion: Whether to expand the query with related terms
+        
+    Returns:
+        Dictionary containing:
+            - original_query: The original query
+            - enhanced_query: Expanded/rewritten query for better semantic search
+            - key_themes: List of key themes/concepts extracted
+            - intent_summary: Brief summary of what the user is looking for
+    """
+    if not user_query or not user_query.strip():
+        return {
+            "original_query": user_query,
+            "enhanced_query": user_query,
+            "key_themes": [],
+            "intent_summary": ""
+        }
+    
+    # If LLM is not available, return original query with basic processing
+    if query_understanding_llm is None:
+        # Basic keyword extraction and query enhancement
+        words = user_query.lower().split()
+        # Remove common stop words (basic list)
+        stop_words = {'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+                     'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should',
+                     'could', 'may', 'might', 'must', 'can', 'about', 'for', 'to', 'of',
+                     'in', 'on', 'at', 'by', 'with', 'from', 'as', 'and', 'or', 'but'}
+        key_words = [w for w in words if w not in stop_words and len(w) > 2]
+        
+        return {
+            "original_query": user_query,
+            "enhanced_query": user_query,  # Keep original if no LLM
+            "key_themes": key_words[:5],  # Top 5 keywords
+            "intent_summary": f"Looking for books related to: {', '.join(key_words[:3])}"
+        }
+    
+    try:
+        # Step 1: Extract key themes and intent
+        intent_prompt = f"""Analyze this book search query and extract key information.
+
+User Query: "{user_query}"
+
+Extract:
+1. Main themes or topics (2-4 key words/phrases)
+2. What type of book the user wants (fiction/nonfiction, genre hints)
+3. Any specific requirements (emotional tone, setting, character types)
+
+Format your response as:
+Themes: [list themes]
+Type: [fiction/nonfiction/general]
+Requirements: [any specific requirements]
+
+Analysis:"""
+        
+        intent_result = query_understanding_llm(
+            intent_prompt,
+            max_length=150,
+            num_return_sequences=1,
+            do_sample=True,
+            temperature=0.3,
+            top_p=0.9,
+        )
+        intent_analysis = intent_result[0]["generated_text"].strip()
+        
+        # Extract themes from analysis
+        themes = []
+        if "Themes:" in intent_analysis:
+            theme_part = intent_analysis.split("Themes:")[1].split("Type:")[0].strip()
+            themes = [t.strip() for t in theme_part.replace("[", "").replace("]", "").split(",") if t.strip()]
+        
+        # Step 2: Expand/rewrite query for better semantic search
+        if enable_expansion:
+            expansion_prompt = f"""Rewrite and expand this book search query to improve semantic search results.
+Include synonyms, related concepts, and alternative phrasings that capture the same intent.
+
+Original Query: "{user_query}"
+
+Create an enhanced query that:
+- Includes synonyms and related terms
+- Maintains the core intent
+- Is optimized for finding semantically similar book descriptions
+- Is concise (1-2 sentences maximum)
+
+Enhanced Query:"""
+            
+            expansion_result = query_understanding_llm(
+                expansion_prompt,
+                max_length=100,
+                num_return_sequences=1,
+                do_sample=True,
+                temperature=0.4,  # Slightly higher for more creative expansion
+                top_p=0.9,
+            )
+            enhanced_query = expansion_result[0]["generated_text"].strip()
+            
+            # Clean up the enhanced query
+            if "Enhanced Query:" in enhanced_query:
+                enhanced_query = enhanced_query.split("Enhanced Query:")[-1].strip()
+            # Remove quotes if present
+            enhanced_query = enhanced_query.strip('"').strip("'")
+        else:
+            enhanced_query = user_query
+        
+        # Step 3: Create intent summary
+        intent_summary = intent_analysis[:200] if len(intent_analysis) > 200 else intent_analysis
+        
+        return {
+            "original_query": user_query,
+            "enhanced_query": enhanced_query if enhanced_query else user_query,
+            "key_themes": themes if themes else [],
+            "intent_summary": intent_summary
+        }
+        
+    except Exception as e:
+        print(f"Error in query understanding: {e}")
+        # Fallback to original query
+        return {
+            "original_query": user_query,
+            "enhanced_query": user_query,
+            "key_themes": [],
+            "intent_summary": ""
+        }
+
+
 def find_similar_books(
     search_text: str,
     genre_filter: str = None,
@@ -81,17 +214,37 @@ def find_similar_books(
     candidate_count: int = 50,
     result_count: int = 16,
     return_scores: bool = False,
+    use_query_understanding: bool = True,
 ) -> tuple:
     """
-    Find books similar to the search query with optional filtering
+    Find books similar to the search query with optional filtering and query understanding
+    
+    Args:
+        search_text: The search query
+        genre_filter: Optional genre filter
+        emotion_preference: Optional emotion preference
+        candidate_count: Number of candidates to retrieve
+        result_count: Number of results to return
+        return_scores: Whether to return similarity scores
+        use_query_understanding: Whether to use query understanding to enhance the query
     
     Returns:
         If return_scores=False: DataFrame with matched books
         If return_scores=True: (DataFrame, dict) where dict maps ISBN to similarity score
     """
-    # Get results with similarity scores
+    # Apply query understanding if enabled
+    if use_query_understanding:
+        query_info = understand_query(search_text, enable_expansion=True)
+        enhanced_query = query_info["enhanced_query"]
+        # Use enhanced query for search, but keep original for display
+        search_query_for_embedding = enhanced_query
+    else:
+        search_query_for_embedding = search_text
+        query_info = None
+    
+    # Get results with similarity scores using the (potentially enhanced) query
     similar_results_with_scores = vector_store.similarity_search_with_score(
-        search_text, k=candidate_count
+        search_query_for_embedding, k=candidate_count
     )
     
     # Extract ISBNs and scores
@@ -215,10 +368,11 @@ Book Information:
 
 Instructions:
 1. Explain how the book's content, themes, or style relate to what the user is looking for
-2. Explain information in detail about the specific aspects of the book that make it a good recommendation
+2. Mention the semantic similarity score and what it indicates about the match quality
 3. Discuss how the genre aligns with the user's query (if relevant)
 4. If emotion information is provided, explain how the book's emotional tone matches the user's preferences
-5. Write multiple sentences that are clear, precise, accurate, informative, and helpful
+5. Be specific about which aspects of the book make it a good recommendation
+6. Write multiple sentences that are clear, informative, and helpful
 
 Detailed Explanation:"""
     
@@ -226,11 +380,11 @@ Detailed Explanation:"""
         # Generate explanation using Flan-T5 with increased length for more verbose output
         result = explanation_llm(
             prompt,
-            max_length=250,  
+            max_length=250,  # Increased from 150 to allow more verbose explanations
             num_return_sequences=1,
             do_sample=True,
-            temperature=0.3, 
-            top_p=0.9,
+            temperature=0.3,  # Slightly higher temperature for more varied and natural explanations
+            top_p=0.9,  # Add top_p for better quality
         )
         explanation = result[0]["generated_text"].strip()
         
@@ -254,14 +408,24 @@ def generate_recommendations(
     user_input: str,
     selected_genre: str,
     selected_emotion: str,
-    include_explanations: bool = True
+    include_explanations: bool = True,
+    use_query_understanding: bool = True
 ):
     """
     Generate and format book recommendations for display with optional explanations
+    
+    Args:
+        user_input: The user's search query
+        selected_genre: Selected genre filter
+        selected_emotion: Selected emotion preference
+        include_explanations: Whether to include AI-generated explanations
+        use_query_understanding: Whether to use query understanding to enhance search
     """
     # Get books with similarity scores
     matched_books_df, isbn_to_score = find_similar_books(
-        user_input, selected_genre, selected_emotion, return_scores=True
+        user_input, selected_genre, selected_emotion, 
+        return_scores=True, 
+        use_query_understanding=use_query_understanding
     )
     
     formatted_results = []
@@ -381,6 +545,7 @@ def generate_recommendations(
 {short_description}
 
 ---"""
+        
         formatted_results.append((book_entry["large_thumbnail"], display_text))
     
     return formatted_results
@@ -547,6 +712,11 @@ with app_interface:
                 value=True,
                 info="Get AI-generated explanations for why each book matches your query"
             )
+            query_understanding_toggle = gr.Checkbox(
+                label="🧠 Enable Query Understanding",
+                value=True,
+                info="Use AI to understand and enhance your query for better results"
+            )
     
     # Filters
     with gr.Row():
@@ -597,20 +767,28 @@ with app_interface:
         elem_classes="footer"
     )
     
-    def generate_with_status(user_input, genre, emotion, explanations):
+    def generate_with_status(user_input, genre, emotion, explanations, query_understanding):
         """Wrapper to show status during generation"""
         if not user_input.strip():
             return gr.update(visible=True, value="⚠️ Please enter a search query."), []
         
         try:
-            results = generate_recommendations(user_input, genre, emotion, explanations)
+            # Show status message if query understanding is enabled
+            if query_understanding:
+                status_text = "🧠 Analyzing your query and enhancing it for better results..."
+            else:
+                status_text = "🔍 Searching for books..."
+            
+            results = generate_recommendations(
+                user_input, genre, emotion, explanations, query_understanding
+            )
             return gr.update(visible=False), results
         except Exception as e:
             return gr.update(visible=True, value=f"❌ Error: {str(e)}"), []
     
     search_button.click(
         fn=generate_with_status,
-        inputs=[search_input, genre_selector, emotion_selector, explanations_toggle],
+        inputs=[search_input, genre_selector, emotion_selector, explanations_toggle, query_understanding_toggle],
         outputs=[status_msg, results_gallery]
     )
 

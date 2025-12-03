@@ -1,3 +1,7 @@
 ./temp_files
 chroma_db/
+chroma_db_all-MiniLM-L6-v2/
+chroma_db_all-mpnet-base-v2/
+chroma_db_bge-small-en-v1.5/
+chroma_db_TF-IDF/
 *.csv

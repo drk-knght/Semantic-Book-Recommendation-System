@@ -1,37 +1,41 @@
-# Semantic Book Recommendation System
+# Large Language Model-Based Book Recommendation System
 
-A comprehensive AI-powered book recommendation system that uses semantic search, emotion analysis, and genre classification to help users discover books based on natural language queries. This project demonstrates advanced information retrieval techniques using vector embeddings, transformer models, and modern NLP pipelines.
+A graduate-level final project for an LLM course. This project builds a book recommendation system using large language models and transformer architectures. The system uses semantic search, zero-shot classification, and LLM-based query understanding, prompt engineering and generative text-to-text models to help users find books based on natural language queries.
 
 ## Project Overview
 
-This project implements a complete book recommendation system with the following capabilities:
+This project implements a book recommendation system that uses several LLM and transformer-based techniques:
 
-- **Semantic Search**: Find books using natural language queries (e.g., "A story about forgiveness and redemption")
-- **Genre Classification**: Automatically classify books into simplified genre categories using zero-shot learning
-- **Emotion Analysis**: Analyze the emotional tone of book descriptions (Happy, Surprising, Angry, Suspenseful, Sad)
-- **Interactive UI**: Beautiful Gradio-based web interface for book discovery
-- **Performance Evaluation**: Comprehensive evaluation framework comparing different embedding models against TF-IDF baselines
-- **Query Understanding**: AI-powered query expansion and intent understanding for better search results
-- **AI Explanations**: Generate explanations for why each book matches the user's query
+- **Query Understanding**: Uses Flan-T5-large to analyze and expand user queries for better search results
+- **Semantic Search**: Creates vector embeddings using transformer models (BGE, MiniLM, MPNet) to find semantically similar books
+- **Zero-Shot Genre Classification**: Automatically classifies books into genres without training on labeled data
+- **Emotion Analysis**: Uses a fine-tuned RoBERTa model to detect emotions in book descriptions
+- **Explanation Generation**: Uses Flan-T5-large to generate explanations for why books are recommended
+- **Evaluation**: Compares transformer-based approaches against TF-IDF baseline with statistical testing
 
 ## Architecture Overview
 
-The system follows a modular pipeline architecture:
+The project follows a pipeline that processes data and builds the recommendation system:
 
 ```
 Raw Dataset (Kaggle)
     ↓
 Data Cleaning & Preprocessing (book-data-analysis.ipynb)
     ↓
-Genre Classification (genre-classification.ipynb)
+Zero-Shot Genre Classification (genre-classification.ipynb)
+    [Transformer-Based Zero-Shot Learning]
     ↓
-Emotion Analysis (emotion-analysis.ipynb)
+Transformer-Based Emotion Analysis (emotion-analysis.ipynb)
+    [Fine-Tuned RoBERTa Model for Emotion Detection]
     ↓
-Vector Database Creation (semantic-search.ipynb)
+Transformer Embedding & Vector Database Creation (semantic-search.ipynb)
+    [Multiple State-of-the-Art Embedding Models]
     ↓
-Interactive Application (book-recommender-app.py)
+LLM-Integrated Application (book-recommender-app.py)
+    [Flan-T5-large for Query Understanding & Explanation Generation]
     ↓
-Evaluation & Comparison (evaluation scripts)
+Comprehensive LLM Evaluation (evaluation scripts)
+    [Statistical Analysis of LLM Performance]
 ```
 
 ## Project Structure
@@ -84,7 +88,7 @@ Semantic-Book-Recommendation-System/
 
 ### 1. **book-data-analysis.ipynb** - Data Preprocessing Pipeline
 
-**Purpose**: Downloads the book dataset from Kaggle and performs comprehensive data cleaning and preprocessing.
+**Purpose**: Downloads the book dataset from Kaggle and cleans/preprocesses the data.
 
 **Key Functions**:
 
@@ -97,138 +101,137 @@ Semantic-Book-Recommendation-System/
 **Input**: Kaggle dataset (downloaded automatically)
 **Output**: `books_cleaned.csv` (5,197 books with 13 columns)
 
-**What it does in detail**:
+**What it does**:
 
 1. Downloads dataset from Kaggle (requires Kaggle API credentials)
-2. Loads and explores the raw dataset structure
-3. Analyzes missing values across all columns
-4. Creates composite features:
+2. Loads and explores the dataset structure
+3. Analyzes missing values
+4. Creates features:
    - `full_title`: Combines title and subtitle
-   - `indexed_content`: ISBN + description for embedding
+   - `indexed_content`: ISBN + description for embeddings
    - `has_description`: Boolean flag
    - `description_word_count`: Length of descriptions
    - `years_since_publication`: Time since publication
-5. Filters data to keep only books with complete information
-6. Exports final cleaned dataset
+5. Filters to keep only books with complete information
+6. Exports cleaned dataset
 
 ---
 
 ### 2. **genre-classification.ipynb** - Zero-Shot Genre Classification
 
-**Purpose**: Automatically classifies books into simplified genre categories using zero-shot text classification.
+**Purpose**: Classifies books into genres using zero-shot learning. Uses a pre-trained transformer model to classify books without training on genre labels.
 
 **Key Functions**:
 
-- Maps complex category labels to simplified genres
-- Uses pre-trained transformer model for zero-shot classification
+- Maps detailed category labels to simplified genres
+- Uses HuggingFace zero-shot classification pipeline
 - Classifies books based on their descriptions
-- Evaluates classification performance on labeled data
-- Predicts genres for books with missing category information
+- Evaluates classification accuracy on books with known genres
+- Predicts genres for books missing category information
 
 **Input**: `books_cleaned.csv`
 **Output**: `books_with_categories.csv`
 
-**What it does in detail**:
+**What it does**:
 
-1. Loads cleaned book dataset
-2. Creates simplified genre categories (Fiction, Non-Fiction, Mystery/Thriller, Romance, etc.)
+1. Loads the cleaned book dataset
+2. Defines simplified genre categories (Fiction, Non-Fiction, Mystery/Thriller, Romance, etc.)
 3. Maps existing detailed categories to simplified genres
-4. Uses HuggingFace's zero-shot classification pipeline
-5. Classifies books based on description text
-6. Evaluates model performance on books with known categories
-7. Predicts genres for books with missing category data
-8. Merges genre predictions back into the dataset
-9. Exports enriched dataset with genre classifications
+4. Uses HuggingFace zero-shot classification pipeline to classify books
+5. Evaluates model performance on books with known categories
+6. Predicts genres for books with missing category data
+7. Merges genre predictions back into the dataset
+8. Exports dataset with genre classifications
 
-**Technology**: HuggingFace Transformers (zero-shot classification pipeline)
+**Technology**: HuggingFace Transformers zero-shot classification pipeline
 
 ---
 
 ### 3. **emotion-analysis.ipynb** - Emotion Detection
 
-**Purpose**: Analyzes the emotional tone of book descriptions using sentence-level emotion classification.
+**Purpose**: Analyzes the emotional tone of book descriptions using a fine-tuned transformer model. Detects emotions at the sentence level and aggregates scores for each book.
 
 **Key Functions**:
 
-- Detects emotions at the sentence level for granular analysis
+- Detects emotions sentence by sentence
 - Identifies five emotions: Joy, Surprise, Anger, Fear, Sadness
-- Extracts maximum emotion scores for each book
-- Merges emotion features into the main dataset
+- Takes the maximum emotion score for each book
+- Adds emotion features to the dataset
 
 **Input**: `books_with_categories.csv`
 **Output**: `books_with_emotions.csv` (final enriched dataset)
 
-**What it does in detail**:
+**What it does**:
 
 1. Loads dataset with genre classifications
 2. Sets up emotion classification model (j-hartmann/emotion-english-distilroberta-base)
+   - Fine-tuned DistilRoBERTa model for emotion detection
 3. Processes each book description sentence by sentence
 4. Detects emotions for each sentence
-5. Aggregates emotion scores (takes maximum for each emotion type)
+5. Takes the maximum score for each emotion type per book
 6. Creates emotion score columns (joy, surprise, anger, fear, sadness)
-7. Merges emotion scores into the main dataset
-8. Exports final enriched dataset
+7. Merges emotion scores into the dataset
+8. Exports final dataset with emotions
 
-**Technology**: HuggingFace Transformers (emotion classification model)
+**Technology**: Fine-tuned DistilRoBERTa model (HuggingFace Transformers)
 
 ---
 
 ### 4. **semantic-search.ipynb** - Vector Database Creation
 
-**Purpose**: Creates a vector database for semantic search by generating embeddings for all book descriptions.
+**Purpose**: Creates a vector database for semantic search by generating embeddings for all book descriptions using a transformer model.
 
 **Key Functions**:
 
-- Exports book descriptions to text file format
-- Creates document embeddings using HuggingFace models
-- Builds ChromaDB vector database for fast similarity search
-- Tests semantic search functionality
+- Exports book descriptions to text file
+- Generates embeddings using a transformer model
+- Creates vector database for fast similarity search
+- Tests semantic search with sample queries
 
 **Input**: `books_cleaned.csv`
 **Output**:
 
 - `book_descriptions.txt` (one book per line: ISBN + description)
-- `chroma_db/` (persisted vector database)
+- `chroma_db/` (vector database with embeddings)
 
-**What it does in detail**:
+**What it does**:
 
 1. Loads cleaned book dataset
-2. Exports `indexed_content` (ISBN + description) to text file
-   - Format: Each line contains ISBN followed by book description
-   - Example: `9780002005883 A NOVEL THAT READERS and critics...`
+2. Exports ISBN and description to text file (one book per line)
+   - Format: `9780002005883 A NOVEL THAT READERS and critics...`
 3. Loads text file as documents using LangChain
 4. Splits documents by newline (each line = one book)
 5. Initializes embedding model:
    - Model: `BAAI/bge-small-en-v1.5`
-   - Dimensions: 384
+   - Embedding dimensions: 384
    - Normalized embeddings for cosine similarity
 6. Creates ChromaDB vector database:
    - Generates embeddings for all book descriptions
    - Stores in `./chroma_db` directory
-   - Persists to disk for reuse
+   - Saves to disk for reuse
 7. Tests semantic search with sample queries
 
 **Technology**:
 
 - LangChain (document processing)
-- HuggingFace Embeddings (BAAI/bge-small-en-v1.5)
+- BAAI/bge-small-en-v1.5 (transformer embedding model)
 - ChromaDB (vector database)
 
-**Important**: The vector database is persisted to disk. On first run, embeddings are generated (takes time). Subsequent runs load the existing database.
+**Note**: The vector database is saved to disk. First run generates embeddings (takes time). Later runs load the existing database.
 
 ---
 
 ### 5. **book-recommender-app.py** - Main Application
 
-**Purpose**: Interactive web application for book recommendations with semantic search, filtering, and AI explanations.
+**Purpose**: Interactive web application for book recommendations using semantic search and LLM-based features. Uses Flan-T5-large for query understanding and generating explanations.
 
 **Key Functions**:
 
-- Natural language query processing with query understanding
+- Query understanding and expansion using Flan-T5-large
 - Semantic search using vector database
-- Genre and emotion filtering
-- AI-generated explanations for recommendations
-- Beautiful Gradio-based user interface
+- Filtering by genre and emotion
+- Generating explanations for recommendations
+- Web interface built with Gradio
 
 **Input**:
 
@@ -237,67 +240,65 @@ Semantic-Book-Recommendation-System/
 
 **Output**: Interactive web application (runs locally)
 
-**What it does in detail**:
+**What it does**:
 
 1. **Initialization**:
 
-   - Loads book dataset with emotions and genres
+   - Loads book dataset with genres and emotions
    - Loads vector database from disk
-   - Initializes embedding model (same as used for database)
-   - Optionally loads LLM (Flan-T5-large) for explanations
+   - Initializes embedding model (BAAI/bge-small-en-v1.5)
+   - Loads Flan-T5-large model for query understanding and explanations
 
 2. **Query Understanding** (`understand_query()`):
 
-   - Analyzes user's natural language query
+   - Uses Flan-T5-large to analyze user query
    - Extracts key themes and intent
-   - Expands/rewrites query for better semantic search
-   - Uses LLM if available, falls back to keyword extraction
+   - Expands/rewrites query for better search
+   - Falls back to keyword extraction if LLM unavailable
 
 3. **Semantic Search** (`find_similar_books()`):
 
-   - Embeds user query using the same model
-   - Searches vector database for similar book descriptions
-   - Returns top-k candidates with similarity scores
+   - Embeds user query using the embedding model
+   - Searches vector database for similar books
+   - Returns top-k results with similarity scores
    - Applies genre and emotion filters
-   - Sorts results by similarity and emotion scores
+   - Sorts by similarity and emotion scores
 
 4. **Explanation Generation** (`generate_explanation()`):
 
-   - Uses LLM to explain why each book matches the query
+   - Uses Flan-T5-large to explain why each book matches the query
    - Considers similarity score, genre, and emotions
-   - Falls back to template-based explanations if LLM unavailable
+   - Falls back to template explanations if LLM unavailable
 
 5. **User Interface** (Gradio):
-   - Search input with examples
-   - Genre dropdown filter
-   - Emotion preference selector
+   - Search input field
+   - Genre and emotion filters
    - Gallery display of recommendations
-   - Book cards with cover, details, and explanations
+   - Book cards with covers, details, and explanations
 
 **Features**:
 
 - Real-time semantic search
 - Filter by genre and emotional tone
-- AI-generated explanations for each recommendation
-- Beautiful, responsive UI with book covers
+- AI-generated explanations for recommendations
 - Displays similarity scores, ratings, publication year, pages
 
 **Technology**:
 
-- Gradio (web UI framework)
+- Gradio (web UI)
 - LangChain + ChromaDB (vector search)
-- HuggingFace Transformers (optional LLM for explanations)
-- Pandas (data manipulation)
+- Flan-T5-large (query understanding and explanations)
+- Transformer embeddings (BAAI/bge-small-en-v1.5)
 
 ---
 
-### 6. **target_evaluation.py** - Evaluation with Hybrid Ground Truth
+### 6. **target_evaluation.py** - Evaluation
 
-**Purpose**: Evaluates the semantic search system using a hybrid ground truth that combines keyword matching and semantic validation.
+**Purpose**: Evaluates the semantic search system by comparing it against a TF-IDF baseline. Uses a hybrid ground truth that combines keyword matches and semantic search results.
 
 **Key Functions**:
 
-- Generates hybrid ground truth (60% keywords + 40% semantic matches)
+- Creates hybrid ground truth (60% keywords + 40% semantic matches)
 - Compares semantic search vs TF-IDF baseline
 - Calculates precision@5, precision@10, recall@5, recall@10
 - Performs statistical significance testing
@@ -305,20 +306,20 @@ Semantic-Book-Recommendation-System/
 **Input**:
 
 - `books_with_emotions.csv`
-- Loads `book-recommender-app.py` functions
+- Loads functions from `book-recommender-app.py`
 
 **Output**:
 
 - `target_evaluation_results.csv`
-- Console metrics and statistics
+- Metrics and statistics
 
-**What it does in detail**:
+**What it does**:
 
 1. **Ground Truth Generation** (`generate_hybrid_ground_truth()`):
 
-   - 60% from keyword matching (obvious relevant books)
-   - 40% from top semantic search results (expert validation)
-   - Simulates human evaluation methodology
+   - 60% from keyword matching
+   - 40% from top semantic search results
+   - Combines both to create comprehensive ground truth
 
 2. **Test Queries**: 8 predefined queries covering different genres:
 
@@ -340,21 +341,19 @@ Semantic-Book-Recommendation-System/
 4. **Statistical Analysis**:
    - Paired t-tests for significance
    - Improvement percentages
-   - Target achievement (semantic ~70%, TF-IDF ~45%)
-
-**Methodology**: Uses hybrid ground truth to simulate real-world evaluation where experts use both keyword matching and semantic understanding to identify relevant books.
+   - Target performance: semantic search ~70%, TF-IDF ~45%
 
 ---
 
 ### 7. **compare_embedding_models.py** - Embedding Model Comparison
 
-**Purpose**: Systematically compares multiple embedding models to find the best one for semantic search.
+**Purpose**: Compares multiple transformer embedding models to find the best one for semantic search. Evaluates different architectures and sizes to understand performance trade-offs.
 
 **Key Functions**:
 
 - Creates vector databases for multiple embedding models
-- Generates ensemble ground truth (fair comparison)
-- Evaluates each model using same metrics
+- Generates ensemble ground truth for fair comparison
+- Evaluates each model using the same metrics
 - Identifies best performing model
 
 **Input**:
@@ -374,19 +373,18 @@ Semantic-Book-Recommendation-System/
 2. **sentence-transformers/all-MiniLM-L6-v2** (384 dims, very fast)
 3. **sentence-transformers/all-mpnet-base-v2** (768 dims, better quality, slower)
 
-**What it does in detail**:
+**What it does**:
 
 1. **Database Creation** (`create_vector_database()`):
 
    - Creates separate ChromaDB database for each model
    - Uses same book descriptions for fair comparison
-   - Persists databases to disk
+   - Saves databases to disk
 
 2. **Ensemble Ground Truth** (`generate_ensemble_ground_truth()`):
 
    - Combines keyword matches + semantic matches from ALL models
    - Ensures fair comparison (all models contribute to ground truth)
-   - More comprehensive than single-model ground truth
 
 3. **Evaluation**:
 
@@ -399,8 +397,6 @@ Semantic-Book-Recommendation-System/
    - Identifies best model by precision and recall
    - Shows improvement percentages
    - Validates that all embedding models outperform TF-IDF
-
-**Key Innovation**: Ensemble ground truth ensures fair comparison where all models are evaluated using the same comprehensive relevance set.
 
 ---
 
@@ -821,7 +817,8 @@ python visualize_recall_results.py
 │ genre-classification │   │ semantic-search.ipynb    │
 │      .ipynb          │   │                          │
 │                      │   │ • Exports descriptions   │
-│ • Zero-shot          │   │ • Creates vector DB      │
+│ [Zero-Shot Learning] │   │ [Transformer Embeddings] │
+│ • Transformer-based  │   │ • Creates vector DB      │
 │   classification     │   │ • Exports:               │
 │ • Adds genres        │   │   - book_descriptions.txt│
 │ • Exports:           │   │   - chroma_db/           │
@@ -832,6 +829,7 @@ python visualize_recall_results.py
            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │         emotion-analysis.ipynb                               │
+│  [Fine-Tuned Transformer]                                    │
 │  • Sentence-level emotion detection                          │
 │  • Aggregates emotion scores                                 │
 │  • Exports: books_with_emotions.csv (FINAL DATASET)          │
@@ -844,14 +842,18 @@ python visualize_recall_results.py
 │ book-        │  │ target_     │  │ compare_embedding_   │
 │ recommender- │  │ evaluation  │  │ models.py            │
 │ app.py       │  │ .py         │  │                      │
-│              │  │             │  │ • Creates multiple   │
-│ • Interactive│  │ • Evaluates │  │   vector databases   │
-│   UI         │  │ • Compares  │  │ • Compares models    │
-│ • Uses:      │  │ • Exports:  │  │ • Exports:           │
-│   - books_   │  │   target_   │  │   - comparison_      │
-│     with_    │  │   evaluation│  │     results.csv      │
-│     emotions │  │     _results│  │   - comparison_      │
-│   - chroma_db│  │     .csv    │  │     summary.csv      │
+│              │  │             │  │ [LLM Evaluation]     │
+│ [Flan-T5-    │  │ • Evaluates │  │ • Creates multiple   │
+│  Large LLM]  │  │ • Compares  │  │   vector databases   │
+│ • Query      │  │ • Exports:  │  │ • Compares models    │
+│   Understanding│  │   target_   │  │ • Exports:           │
+│ • Explanation│  │   evaluation│  │   - comparison_      │
+│   Generation │  │     _results│  │     results.csv      │
+│ • Uses:      │  │     .csv    │  │   - comparison_      │
+│   - books_   │  │             │  │     summary.csv      │
+│     with_    │  │             │  │                      │
+│     emotions │  │             │  │                      │
+│   - chroma_db│  │             │  │                      │
 │              │  │             │  │                      │
 └──────────────┘  └─────────────┘  └──────────────────────┘
 ```
@@ -928,39 +930,27 @@ To change genre classification:
 
 ---
 
-## Key Technologies Used
+## Key Technologies
+
+### Large Language Models
+
+- **Flan-T5-large** (780M parameters): Text-to-text transformer model used for query understanding and generating explanations
+- **Transformer Embedding Models**:
+  - BAAI/bge-small-en-v1.5 (384 dims)
+  - sentence-transformers/all-MiniLM-L6-v2 (384 dims)
+  - sentence-transformers/all-mpnet-base-v2 (768 dims)
+- **Fine-Tuned Models**: DistilRoBERTa-based emotion classifier
+- **Zero-Shot Classification**: HuggingFace transformers pipeline
 
 ### Core Libraries
 
-- **Pandas**: Data manipulation and analysis
-- **NumPy**: Numerical computing
+- **PyTorch**: Deep learning framework
+- **HuggingFace Transformers**: Transformer model library
+- **LangChain**: Document processing and vector stores
+- **ChromaDB**: Vector database for embeddings
+- **Gradio**: Web interface
+- **Pandas/NumPy**: Data manipulation
 - **Scikit-learn**: TF-IDF baseline and evaluation metrics
-- **Matplotlib/Seaborn**: Data visualization
-
-### NLP & ML
-
-- **HuggingFace Transformers**:
-  - Embedding models (BAAI/bge-small-en-v1.5, etc.)
-  - Zero-shot classification
-  - Emotion analysis
-  - Text generation (Flan-T5-large)
-- **PyTorch**: Deep learning backend
-- **LangChain**: Document processing and vector store integration
-
-### Vector Database
-
-- **ChromaDB**: Persistent vector database for embeddings
-- **HNSWLib**: Fast approximate nearest neighbor search
-
-### Web Interface
-
-- **Gradio**: Interactive web UI framework
-- **Custom CSS**: Styling for book gallery
-
-### Data Sources
-
-- **Kaggle**: Book metadata dataset
-- **kagglehub**: Dataset download utility
 
 ---
 
@@ -984,17 +974,12 @@ To change genre classification:
 
 ### Ground Truth Methodology
 
-The project uses **hybrid ground truth**:
+The project uses a hybrid ground truth:
 
-- 60% from keyword matching (obvious matches)
-- 40% from semantic search results (expert validation)
+- 60% from keyword matching (obvious relevant books)
+- 40% from top semantic search results (validated as relevant)
 
-This simulates real-world evaluation where human experts use both:
-
-1. Keyword matching (exact matches)
-2. Semantic understanding (conceptual relevance)
-
-This approach is similar to how professional evaluation datasets (TREC, MS MARCO) are created.
+This combines both keyword matching and semantic understanding to create a comprehensive set of relevant books for evaluation.
 
 ### Expected Performance
 
@@ -1005,122 +990,16 @@ This gap demonstrates the value of semantic understanding over keyword matching.
 
 ---
 
-## Troubleshooting
+## LLM Techniques Used
 
-### Issue: Kaggle Dataset Download Fails
+This project demonstrates several LLM and transformer techniques:
 
-**Symptoms**: Error when running `book-data-analysis.ipynb`
-
-**Solutions**:
-
-1. Verify Kaggle API credentials are set up correctly
-2. Check internet connection
-3. Alternative: Use existing dataset files if available
-4. Manual download: Download from Kaggle website and place CSV in project root
-
----
-
-### Issue: Vector Database Not Found
-
-**Symptoms**: `FileNotFoundError: ChromaDB not found at ./chroma_db`
-
-**Solutions**:
-
-1. Run `semantic-search.ipynb` first to create the database
-2. Check that `chroma_db/` directory exists
-3. Verify `book_descriptions.txt` exists before creating database
-
----
-
-### Issue: Out of Memory Errors
-
-**Symptoms**: System crashes or errors during model loading/embedding generation
-
-**Solutions**:
-
-1. Close other applications to free up RAM
-2. Use CPU instead of GPU (slower but uses less memory)
-   - Change `device="mps"` to `device="cpu"` in relevant files
-3. Process data in smaller batches
-4. Use a smaller embedding model
-
----
-
-### Issue: Models Download Slowly
-
-**Symptoms**: Very slow first-time execution
-
-**Solutions**:
-
-1. This is normal - models are downloaded from HuggingFace (one-time)
-2. Ensure stable internet connection
-3. Models are cached after first download
-4. Subsequent runs will be faster
-
----
-
-### Issue: Gradio Interface Won't Load
-
-**Symptoms**: Application crashes or browser won't connect
-
-**Solutions**:
-
-1. Check that port 7860 is not already in use
-2. Verify `books_with_emotions.csv` exists
-3. Verify `chroma_db/` directory exists
-4. Check console for error messages
-5. Try accessing `http://localhost:7860` instead of 127.0.0.1
-
----
-
-### Issue: LLM (Flan-T5) Not Loading
-
-**Symptoms**: Warning messages about LLM not available
-
-**Solutions**:
-
-1. This is optional - the app works without it (uses template explanations)
-2. Ensure PyTorch and Transformers are properly installed
-3. Check available disk space (model is ~3GB)
-4. First download may take time
-
----
-
-### Issue: Evaluation Scripts Fail
-
-**Symptoms**: Import errors or missing dependencies
-
-**Solutions**:
-
-1. Ensure `books_with_emotions.csv` exists
-2. For `target_evaluation.py`, ensure `book-recommender-app.py` works first
-3. Check that all required CSV files are generated in previous steps
-4. Verify vector database exists if evaluation uses semantic search
-
----
-
-## Performance Considerations
-
-### Expected Execution Times
-
-| Step                     | First Run | Subsequent Runs         |
-| ------------------------ | --------- | ----------------------- |
-| Data Cleaning            | 5-10 min  | 2-5 min                 |
-| Genre Classification     | 30-60 min | 15-30 min               |
-| Emotion Analysis         | 60-90 min | 30-60 min               |
-| Vector Database Creation | 30-60 min | <1 min (loads existing) |
-| Application Launch       | 1-2 min   | 30-60 sec               |
-| Target Evaluation        | 5-10 min  | 5-10 min                |
-| Model Comparison         | 2-4 hours | 1-2 hours               |
-
-**Note**: Times are approximate and depend on hardware (CPU/GPU), internet speed, and dataset size.
-
-### Optimization Tips
-
-1. **Use GPU**: Significant speedup for embedding generation and model inference
-2. **Persist Databases**: Vector databases are saved to disk - reuse them
-3. **Cache Models**: HuggingFace models are cached after first download
-4. **Skip Optional Steps**: Emotion analysis and model comparison are optional
+- **Prompt Engineering**: Uses prompts with Flan-T5-large for query understanding and explanation generation
+- **Zero-Shot Learning**: Classifies books into genres without training on labeled data
+- **Fine-Tuning**: Uses a fine-tuned transformer model for emotion detection
+- **Semantic Embeddings**: Creates dense vector representations using transformer models
+- **Text Generation**: Uses Flan-T5-large to generate explanations for recommendations
+- **Model Comparison**: Evaluates multiple transformer architectures and compares their performance
 
 ---
 
@@ -1190,27 +1069,6 @@ This gap demonstrates the value of semantic understanding over keyword matching.
 ```
 
 **Purpose**: Text file format for LangChain document loaders to create vector database.
-
----
-
-## Security and Privacy
-
-- **No API Keys Required**: Project uses local models (no external API calls for core functionality)
-- **Local Processing**: All data processing happens locally
-- **Public Dataset**: Uses publicly available Kaggle dataset
-- **No User Data Storage**: Application doesn't store user queries or interactions
-
----
-
-## Contributing
-
-This is an academic/research project. If you'd like to contribute get in touch with the authors or do the following:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
 
 ---
 

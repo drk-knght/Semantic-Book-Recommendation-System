@@ -78,13 +78,12 @@ emotion_sort_map = {
 }
 
 
-def understand_query(user_query: str, enable_expansion: bool = True) -> dict:
+def understand_query(user_query: str) -> dict:
     """
     Analyze and understand the user's query to extract intent, themes, and improve search.
     
     Args:
         user_query: The original user query
-        enable_expansion: Whether to expand the query with related terms
         
     Returns:
         Dictionary containing:
@@ -116,7 +115,7 @@ def understand_query(user_query: str, enable_expansion: bool = True) -> dict:
             "original_query": user_query,
             "enhanced_query": user_query,  # Keep original if no LLM
             "key_themes": key_words[:5],  # Top 5 keywords
-            "intent_summary": f"Looking for books related to: {', '.join(key_words[:3])}"
+            "intent_summary": f"Looking for books related to: {', '.join(key_words[:15])}"
         }
     
     try:
@@ -139,7 +138,7 @@ Analysis:"""
         
         intent_result = query_understanding_llm(
             intent_prompt,
-            max_length=150,
+            max_length=450,
             num_return_sequences=1,
             do_sample=True,
             temperature=0.3,
@@ -154,8 +153,7 @@ Analysis:"""
             themes = [t.strip() for t in theme_part.replace("[", "").replace("]", "").split(",") if t.strip()]
         
         # Step 2: Expand/rewrite query for better semantic search
-        if enable_expansion:
-            expansion_prompt = f"""Rewrite and expand this book search query to improve semantic search results.
+        expansion_prompt = f"""Rewrite and expand this book search query to improve semantic search results.
 Include synonyms, related concepts, and alternative phrasings that capture the same intent.
 
 Original Query: "{user_query}"
@@ -167,24 +165,22 @@ Create an enhanced query that:
 - Is concise (1-2 sentences maximum)
 
 Enhanced Query:"""
-            
-            expansion_result = query_understanding_llm(
-                expansion_prompt,
-                max_length=100,
-                num_return_sequences=1,
-                do_sample=True,
-                temperature=0.4,  # Slightly higher for more creative expansion
-                top_p=0.9,
-            )
-            enhanced_query = expansion_result[0]["generated_text"].strip()
-            
-            # Clean up the enhanced query
-            if "Enhanced Query:" in enhanced_query:
-                enhanced_query = enhanced_query.split("Enhanced Query:")[-1].strip()
-            # Remove quotes if present
-            enhanced_query = enhanced_query.strip('"').strip("'")
-        else:
-            enhanced_query = user_query
+        
+        expansion_result = query_understanding_llm(
+            expansion_prompt,
+            max_length=100,
+            num_return_sequences=1,
+            do_sample=True,
+            temperature=0.4,  # Slightly higher for more creative expansion
+            top_p=0.9,
+        )
+        enhanced_query = expansion_result[0]["generated_text"].strip()
+        
+        # Clean up the enhanced query
+        if "Enhanced Query:" in enhanced_query:
+            enhanced_query = enhanced_query.split("Enhanced Query:")[-1].strip()
+        # Remove quotes if present
+        enhanced_query = enhanced_query.strip('"').strip("'")
         
         # Step 3: Create intent summary
         intent_summary = intent_analysis[:200] if len(intent_analysis) > 200 else intent_analysis
@@ -212,9 +208,8 @@ def find_similar_books(
     genre_filter: str = None,
     emotion_preference: str = None,
     candidate_count: int = 50,
-    result_count: int = 16,
+    result_count: int = 10,
     return_scores: bool = False,
-    use_query_understanding: bool = True,
 ) -> tuple:
     """
     Find books similar to the search query with optional filtering and query understanding
@@ -226,21 +221,16 @@ def find_similar_books(
         candidate_count: Number of candidates to retrieve
         result_count: Number of results to return
         return_scores: Whether to return similarity scores
-        use_query_understanding: Whether to use query understanding to enhance the query
     
     Returns:
         If return_scores=False: DataFrame with matched books
         If return_scores=True: (DataFrame, dict) where dict maps ISBN to similarity score
     """
-    # Apply query understanding if enabled
-    if use_query_understanding:
-        query_info = understand_query(search_text, enable_expansion=True)
-        enhanced_query = query_info["enhanced_query"]
-        # Use enhanced query for search, but keep original for display
-        search_query_for_embedding = enhanced_query
-    else:
-        search_query_for_embedding = search_text
-        query_info = None
+    # Apply query understanding to enhance the query
+    query_info = understand_query(search_text)
+    enhanced_query = query_info["enhanced_query"]
+    # Use enhanced query for search, but keep original for display
+    search_query_for_embedding = enhanced_query
     
     # Get results with similarity scores using the (potentially enhanced) query
     similar_results_with_scores = vector_store.similarity_search_with_score(
@@ -408,24 +398,19 @@ def generate_recommendations(
     user_input: str,
     selected_genre: str,
     selected_emotion: str,
-    include_explanations: bool = True,
-    use_query_understanding: bool = True
 ):
     """
-    Generate and format book recommendations for display with optional explanations
+    Generate and format book recommendations for display with AI explanations
     
     Args:
         user_input: The user's search query
         selected_genre: Selected genre filter
         selected_emotion: Selected emotion preference
-        include_explanations: Whether to include AI-generated explanations
-        use_query_understanding: Whether to use query understanding to enhance search
     """
     # Get books with similarity scores
     matched_books_df, isbn_to_score = find_similar_books(
         user_input, selected_genre, selected_emotion, 
-        return_scores=True, 
-        use_query_understanding=use_query_understanding
+        return_scores=True
     )
     
     formatted_results = []
@@ -454,9 +439,9 @@ def generate_recommendations(
                 "sadness": book_entry.get("sadness", 0),
             }
         
-        # Generate explanation if requested
+        # Generate explanation
         explanation = ""
-        if include_explanations and user_input.strip():
+        if user_input.strip():
             explanation = generate_explanation(
                 user_query=user_input,
                 book_title=book_entry["title"],
@@ -699,24 +684,12 @@ with app_interface:
     
     # Search section
     with gr.Row():
-        with gr.Column(scale=3):
-            search_input = gr.Textbox(
-                label="🔍 What kind of book are you looking for?",
-                placeholder="e.g., A story about forgiveness and redemption, A thrilling mystery with unexpected twists, A book to teach children about nature...",
-                lines=3,
-                info="Describe the book you want to find in natural language"
-            )
-        with gr.Column(scale=1):
-            explanations_toggle = gr.Checkbox(
-                label="✨ Include AI Explanations",
-                value=True,
-                info="Get AI-generated explanations for why each book matches your query"
-            )
-            query_understanding_toggle = gr.Checkbox(
-                label="🧠 Enable Query Understanding",
-                value=True,
-                info="Use AI to understand and enhance your query for better results"
-            )
+        search_input = gr.Textbox(
+            label="🔍 What kind of book are you looking for?",
+            placeholder="e.g., A story about forgiveness and redemption, A thrilling mystery with unexpected twists, A book to teach children about nature...",
+            lines=3,
+            info="Describe the book you want to find in natural language"
+        )
     
     # Filters
     with gr.Row():
@@ -748,7 +721,7 @@ with app_interface:
         results_gallery = gr.Gallery(
             label="",
             columns=2,
-            rows=8,
+            rows=5,
             height=800,
             show_label=False,
             elem_classes="book-gallery",
@@ -767,20 +740,14 @@ with app_interface:
         elem_classes="footer"
     )
     
-    def generate_with_status(user_input, genre, emotion, explanations, query_understanding):
+    def generate_with_status(user_input, genre, emotion):
         """Wrapper to show status during generation"""
         if not user_input.strip():
             return gr.update(visible=True, value="⚠️ Please enter a search query."), []
         
         try:
-            # Show status message if query understanding is enabled
-            if query_understanding:
-                status_text = "🧠 Analyzing your query and enhancing it for better results..."
-            else:
-                status_text = "🔍 Searching for books..."
-            
             results = generate_recommendations(
-                user_input, genre, emotion, explanations, query_understanding
+                user_input, genre, emotion
             )
             return gr.update(visible=False), results
         except Exception as e:
@@ -788,11 +755,10 @@ with app_interface:
     
     search_button.click(
         fn=generate_with_status,
-        inputs=[search_input, genre_selector, emotion_selector, explanations_toggle, query_understanding_toggle],
+        inputs=[search_input, genre_selector, emotion_selector],
         outputs=[status_msg, results_gallery]
     )
 
 
 if __name__ == "__main__":
     app_interface.launch()
-

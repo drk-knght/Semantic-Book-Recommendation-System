@@ -65,10 +65,10 @@ Semantic-Book-Recommendation-System/
 │   └── cover-not-found.jpg           # Placeholder for missing book covers
 │
 ├── Vector Databases (ChromaDB)
-│   ├── chroma_db/                    # Main vector database (BAAI/bge-small-en-v1.5)
+│   ├── chroma_db/                    # Main vector database (BAAI/bge-large-en-v1.5)
 │   ├── chroma_db_all-MiniLM-L6-v2/   # Alternative embedding model database
 │   ├── chroma_db_all-mpnet-base-v2/  # Alternative embedding model database
-│   └── chroma_db_bge-small-en-v1.5/  # Alternative embedding model database
+│   └── chroma_db_bge-large-en-v1.5/  # Alternative embedding model database
 │
 ├── Evaluation Results
 │   ├── target_evaluation_results.csv         # Evaluation metrics per query
@@ -202,8 +202,8 @@ Semantic-Book-Recommendation-System/
 3. Loads text file as documents using LangChain
 4. Splits documents by newline (each line = one book)
 5. Initializes embedding model:
-   - Model: `BAAI/bge-small-en-v1.5`
-   - Embedding dimensions: 384
+   - Model: `BAAI/bge-large-en-v1.5`
+   - Embedding dimensions: 1024
    - Normalized embeddings for cosine similarity
 6. Creates ChromaDB vector database:
    - Generates embeddings for all book descriptions
@@ -214,7 +214,7 @@ Semantic-Book-Recommendation-System/
 **Technology**:
 
 - LangChain (document processing)
-- BAAI/bge-small-en-v1.5 (transformer embedding model)
+- BAAI/bge-large-en-v1.5 (transformer embedding model)
 - ChromaDB (vector database)
 
 **Note**: The vector database is saved to disk. First run generates embeddings (takes time). Later runs load the existing database.
@@ -246,7 +246,7 @@ Semantic-Book-Recommendation-System/
 
    - Loads book dataset with genres and emotions
    - Loads vector database from disk
-   - Initializes embedding model (BAAI/bge-small-en-v1.5)
+   - Initializes embedding model (BAAI/bge-large-en-v1.5)
    - Loads Flan-T5-large model for query understanding and explanations
 
 2. **Query Understanding** (`understand_query()`):
@@ -288,7 +288,7 @@ Semantic-Book-Recommendation-System/
 - Gradio (web UI)
 - LangChain + ChromaDB (vector search)
 - Flan-T5-large (query understanding and explanations)
-- Transformer embeddings (BAAI/bge-small-en-v1.5)
+- Transformer embeddings (BAAI/bge-large-en-v1.5)
 
 ---
 
@@ -369,7 +369,7 @@ Semantic-Book-Recommendation-System/
 
 **Models Compared**:
 
-1. **BAAI/bge-small-en-v1.5** (384 dims, fast, good quality) - Current model
+1. **BAAI/bge-large-en-v1.5** (1024 dims, high quality, best performance) - Current model
 2. **sentence-transformers/all-MiniLM-L6-v2** (384 dims, very fast)
 3. **sentence-transformers/all-mpnet-base-v2** (768 dims, better quality, slower)
 
@@ -880,11 +880,11 @@ python visualize_recall_results.py
 
 ### Changing the Embedding Model
 
-The default embedding model is `BAAI/bge-small-en-v1.5`. To use a different model:
+The default embedding model is `BAAI/bge-large-en-v1.5`. To use a different model:
 
 1. **For the main application** (`book-recommender-app.py`):
 
-   - Change line 28: `model_name="BAAI/bge-small-en-v1.5"` to your preferred model
+   - Change line 28: `model_name="BAAI/bge-large-en-v1.5"` to your preferred model
    - **Important**: You must recreate the vector database using the new model
    - Delete `chroma_db/` directory and rerun `semantic-search.ipynb`
 
@@ -936,7 +936,7 @@ To change genre classification:
 
 - **Flan-T5-large** (780M parameters): Text-to-text transformer model used for query understanding and generating explanations
 - **Transformer Embedding Models**:
-  - BAAI/bge-small-en-v1.5 (384 dims)
+  - BAAI/bge-large-en-v1.5 (1024 dims)
   - sentence-transformers/all-MiniLM-L6-v2 (384 dims)
   - sentence-transformers/all-mpnet-base-v2 (768 dims)
 - **Fine-Tuned Models**: DistilRoBERTa-based emotion classifier
@@ -1091,7 +1091,7 @@ This project demonstrates several LLM and transformer techniques:
 
 ### HuggingFace Models
 
-- [BGE Embeddings](https://huggingface.co/BAAI/bge-small-en-v1.5)
+- [BGE Embeddings](https://huggingface.co/BAAI/bge-large-en-v1.5)
 - [Zero-Shot Classification](https://huggingface.co/docs/transformers/tasks/zero_shot_classification)
 
 ### Evaluation Metrics

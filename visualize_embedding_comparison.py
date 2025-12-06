@@ -48,9 +48,15 @@ print(f"✓ Output directory: {output_dir}")
 print("\n📈 Generating Precision@10 comparison...")
 fig, ax = plt.subplots(figsize=(12, 7))
 
-# Extract numeric values
-summary_df['P@10_num'] = summary_df['P@10'].str.rstrip('%').astype(float)
-summary_df['TFIDF_P@10_num'] = summary_df['vs TF-IDF P@10'].str.rstrip('%').astype(float)
+# Extract numeric values - handle both decimal and percentage formats
+if summary_df['P@10'].dtype == 'object' and summary_df['P@10'].str.contains('%').any():
+    # Percentage format
+    summary_df['P@10_num'] = summary_df['P@10'].str.rstrip('%').astype(float)
+    summary_df['TFIDF_P@10_num'] = summary_df['vs TF-IDF P@10'].str.rstrip('%').astype(float)
+else:
+    # Decimal format - convert to percentage
+    summary_df['P@10_num'] = summary_df['P@10'].astype(float) * 100
+    summary_df['TFIDF_P@10_num'] = summary_df['vs TF-IDF P@10'].astype(float) * 100
 
 # Prepare data
 models = summary_df['Model'].tolist()
@@ -97,9 +103,15 @@ plt.close()
 print("\n📈 Generating Recall@10 comparison...")
 fig, ax = plt.subplots(figsize=(12, 7))
 
-# Extract numeric values
-summary_df['R@10_num'] = summary_df['R@10'].str.rstrip('%').astype(float)
-summary_df['TFIDF_R@10_num'] = summary_df['vs TF-IDF R@10'].str.rstrip('%').astype(float)
+# Extract numeric values - handle both decimal and percentage formats
+if summary_df['R@10'].dtype == 'object' and summary_df['R@10'].str.contains('%').any():
+    # Percentage format
+    summary_df['R@10_num'] = summary_df['R@10'].str.rstrip('%').astype(float)
+    summary_df['TFIDF_R@10_num'] = summary_df['vs TF-IDF R@10'].str.rstrip('%').astype(float)
+else:
+    # Decimal format - convert to percentage
+    summary_df['R@10_num'] = summary_df['R@10'].astype(float) * 100
+    summary_df['TFIDF_R@10_num'] = summary_df['vs TF-IDF R@10'].astype(float) * 100
 
 r10_values = summary_df['R@10_num'].tolist()
 tfidf_r10 = summary_df['TFIDF_R@10_num'].iloc[0]  # Same for all
@@ -154,6 +166,7 @@ for bar, val in zip(bars1, summary_df['P_Improvement_num']):
 ax1.set_xlabel('Embedding Model', fontsize=12, fontweight='bold')
 ax1.set_ylabel('Improvement (%)', fontsize=12, fontweight='bold')
 ax1.set_title('Precision@10 Improvement Over TF-IDF', fontsize=13, fontweight='bold')
+ax1.set_xticks(range(len(models)))
 ax1.set_xticklabels([m.replace('-', '\n') for m in models], fontsize=10)
 ax1.axhline(y=0, color='black', linestyle='-', linewidth=0.8)
 ax1.grid(axis='y', alpha=0.3)
@@ -169,6 +182,7 @@ for bar, val in zip(bars2, summary_df['R_Improvement_num']):
 ax2.set_xlabel('Embedding Model', fontsize=12, fontweight='bold')
 ax2.set_ylabel('Improvement (%)', fontsize=12, fontweight='bold')
 ax2.set_title('Recall@10 Improvement Over TF-IDF', fontsize=13, fontweight='bold')
+ax2.set_xticks(range(len(models)))
 ax2.set_xticklabels([m.replace('-', '\n') for m in models], fontsize=10)
 ax2.axhline(y=0, color='black', linestyle='-', linewidth=0.8)
 ax2.grid(axis='y', alpha=0.3)
@@ -401,8 +415,13 @@ ax7.axis('off')
 summary_text = "SUMMARY STATISTICS\n" + "="*30 + "\n\n"
 for _, row in summary_df.iterrows():
     summary_text += f"{row['Model']}\n"
-    summary_text += f"  P@10: {row['P@10']} (vs {row['vs TF-IDF P@10']})\n"
-    summary_text += f"  R@10: {row['R@10']} (vs {row['vs TF-IDF R@10']})\n"
+    # Use percentage columns if available, otherwise format decimal
+    p10_display = row.get('P@10_pct', f"{row['P@10_num']:.2f}%")
+    tfidf_p10_display = row.get('vs TF-IDF P@10_pct', f"{summary_df['TFIDF_P@10_num'].iloc[0]:.2f}%")
+    r10_display = row.get('R@10_pct', f"{row['R@10_num']:.2f}%")
+    tfidf_r10_display = row.get('vs TF-IDF R@10_pct', f"{summary_df['TFIDF_R@10_num'].iloc[0]:.2f}%")
+    summary_text += f"  P@10: {p10_display} (vs {tfidf_p10_display})\n"
+    summary_text += f"  R@10: {r10_display} (vs {tfidf_r10_display})\n"
     summary_text += f"  Improvement: {row['P@10 Improvement']} / {row['R@10 Improvement']}\n\n"
 ax7.text(0.1, 0.9, summary_text, transform=ax7.transAxes,
          fontsize=9, verticalalignment='top', family='monospace',

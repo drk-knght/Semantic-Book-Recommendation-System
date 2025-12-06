@@ -273,17 +273,31 @@ def generate_ensemble_ground_truth(query: str, keywords: List[str],
     """
     Generate ensemble ground truth that includes semantic matches from ALL models.
     This ensures fair comparison - all models contribute to ground truth.
+    
+    NOTE: This method includes semantic results from all models being evaluated,
+    which can create a circular dependency. However, it ensures all models are
+    evaluated against the same comprehensive ground truth.
     """
     # Part 1: Keyword-based matches (fair for all)
     keyword_isbns = generate_keyword_ground_truth(query, keywords, top_n=60)
     
     # Part 2: Semantic matches from ALL models (fair ensemble)
+    # We use a larger k to get more diverse results, then take top_k from each
     semantic_isbns = set()
     for model_key, vector_store in all_vector_stores.items():
         try:
-            # Get top results from each model
-            sem_results = semantic_search(query, vector_store, k=semantic_top_k)
-            semantic_isbns.update(sem_results)
+            # Get more results to ensure diversity, then take top_k
+            sem_results = semantic_search(query, vector_store, k=semantic_top_k * 2)
+            # Take top_k unique results
+            unique_results = []
+            seen = set()
+            for isbn in sem_results:
+                if isbn not in seen:
+                    unique_results.append(isbn)
+                    seen.add(isbn)
+                    if len(unique_results) >= semantic_top_k:
+                        break
+            semantic_isbns.update(unique_results)
         except Exception as e:
             print(f"    Warning: Could not get semantic results from {model_key}: {e}")
             continue
@@ -356,6 +370,8 @@ def evaluate_model(model_key: str, model_config: Dict, ground_truth: Dict[str, S
             'tfidf_R@5': tfidf_r5,
             'semantic_R@10': sem_r10,
             'tfidf_R@10': tfidf_r10,
+            'semantic_results_count': len(sem),
+            'semantic_top_isbn': sem[0] if len(sem) > 0 else None,
         })
         
         sem_found = len(set(sem) & gt)
@@ -363,7 +379,7 @@ def evaluate_model(model_key: str, model_config: Dict, ground_truth: Dict[str, S
     
     df = pd.DataFrame(results)
     
-    # Calculate averages
+    # Calculate averages with high precision
     sem_p10_avg = df['semantic_P@10'].mean()
     tfidf_p10_avg = df['tfidf_P@10'].mean()
     sem_r10_avg = df['semantic_R@10'].mean()
@@ -373,8 +389,12 @@ def evaluate_model(model_key: str, model_config: Dict, ground_truth: Dict[str, S
     improvement_r = ((sem_r10_avg - tfidf_r10_avg) / tfidf_r10_avg * 100) if tfidf_r10_avg > 0 else 0
     
     print(f"\n📈 Results for {model_key}:")
-    print(f"   Precision@10: {sem_p10_avg:.1%} (vs TF-IDF: {tfidf_p10_avg:.1%}, improvement: {improvement_p:+.1f}%)")
-    print(f"   Recall@10:    {sem_r10_avg:.1%} (vs TF-IDF: {tfidf_r10_avg:.1%}, improvement: {improvement_r:+.1f}%)")
+    print(f"   Precision@10: {sem_p10_avg:.3f} ({sem_p10_avg:.2%}) vs TF-IDF: {tfidf_p10_avg:.3f} ({tfidf_p10_avg:.2%}), improvement: {improvement_p:+.2f}%")
+    print(f"   Recall@10:    {sem_r10_avg:.3f} ({sem_r10_avg:.2%}) vs TF-IDF: {tfidf_r10_avg:.3f} ({tfidf_r10_avg:.2%}), improvement: {improvement_r:+.2f}%")
+    
+    # Debug: Show per-query values to verify calculation
+    print(f"\n   Per-query P@10 values: {df['semantic_P@10'].tolist()}")
+    print(f"   Sum: {df['semantic_P@10'].sum():.6f}, Mean: {sem_p10_avg:.6f}")
     
     return df
 
@@ -475,12 +495,16 @@ if all_results:
             summary.append({
                 'Model': model_key,
                 'Model Name': EMBEDDING_MODELS[model_key]['model_name'],
-                'P@10': f"{sem_p10:.1%}",
-                'vs TF-IDF P@10': f"{tfidf_p10:.1%}",
-                'P@10 Improvement': f"{improvement_p:+.1f}%",
-                'R@10': f"{sem_r10:.1%}",
-                'vs TF-IDF R@10': f"{tfidf_r10:.1%}",
-                'R@10 Improvement': f"{improvement_r:+.1f}%",
+                'P@10': f"{sem_p10:.3f}",
+                'P@10_pct': f"{sem_p10:.2%}",
+                'vs TF-IDF P@10': f"{tfidf_p10:.3f}",
+                'vs TF-IDF P@10_pct': f"{tfidf_p10:.2%}",
+                'P@10 Improvement': f"{improvement_p:+.2f}%",
+                'R@10': f"{sem_r10:.3f}",
+                'R@10_pct': f"{sem_r10:.2%}",
+                'vs TF-IDF R@10': f"{tfidf_r10:.3f}",
+                'vs TF-IDF R@10_pct': f"{tfidf_r10:.2%}",
+                'R@10 Improvement': f"{improvement_r:+.2f}%",
                 'P@10 p-value': f"{p_val_p:.4f}",
                 'P@10 Significant': '✓' if p_val_p < 0.05 else '✗',
                 'R@10 p-value': f"{p_val_r:.4f}",
@@ -488,7 +512,11 @@ if all_results:
             })
     
     summary_df = pd.DataFrame(summary)
-    print("\n" + summary_df.to_string(index=False))
+    
+    # Print summary with both decimal and percentage
+    print("\nSummary (showing high precision to avoid rounding artifacts):")
+    print(summary_df[['Model', 'P@10', 'P@10_pct', 'P@10 Improvement', 'R@10', 'R@10_pct', 'R@10 Improvement', 
+                      'P@10 Significant', 'R@10 Significant']].to_string(index=False))
     
     # Save summary
     summary_df.to_csv('embedding_model_comparison_summary.csv', index=False)
@@ -496,9 +524,9 @@ if all_results:
     
     # Find best model
     if len(summary_df) > 0:
-        # Extract numeric values
-        summary_df['P@10_num'] = summary_df['P@10'].str.rstrip('%').astype(float)
-        summary_df['R@10_num'] = summary_df['R@10'].str.rstrip('%').astype(float)
+        # Extract numeric values from decimal format
+        summary_df['P@10_num'] = summary_df['P@10'].astype(float)
+        summary_df['R@10_num'] = summary_df['R@10'].astype(float)
         
         # Best by precision
         best_p_idx = summary_df['P@10_num'].idxmax()
@@ -509,16 +537,28 @@ if all_results:
         best_r_model = summary_df.loc[best_r_idx]
         
         print(f"\n🏆 Best Model by Precision@10: {best_p_model['Model']} ({best_p_model['Model Name']})")
-        print(f"   Precision@10: {best_p_model['P@10']}")
+        print(f"   Precision@10: {best_p_model['P@10']} ({best_p_model['P@10_pct']})")
         print(f"   Improvement: {best_p_model['P@10 Improvement']}")
         
         print(f"\n🏆 Best Model by Recall@10: {best_r_model['Model']} ({best_r_model['Model Name']})")
-        print(f"   Recall@10: {best_r_model['R@10']}")
+        print(f"   Recall@10: {best_r_model['R@10']} ({best_r_model['R@10_pct']})")
         print(f"   Improvement: {best_r_model['R@10 Improvement']}")
         
+        # Show differences between models
+        print(f"\n📊 Model Differences:")
+        for i, row1 in summary_df.iterrows():
+            for j, row2 in summary_df.iterrows():
+                if i < j:
+                    p_diff = row1['P@10_num'] - row2['P@10_num']
+                    r_diff = row1['R@10_num'] - row2['R@10_num']
+                    if abs(p_diff) > 0.001 or abs(r_diff) > 0.001:
+                        print(f"   {row1['Model']} vs {row2['Model']}:")
+                        print(f"     P@10 diff: {p_diff:+.4f} ({p_diff*100:+.2f}%)")
+                        print(f"     R@10 diff: {r_diff:+.4f} ({r_diff*100:+.2f}%)")
+        
         # Check if all models beat TF-IDF (both precision and recall)
-        tfidf_p10 = summary_df['vs TF-IDF P@10'].str.rstrip('%').astype(float)
-        tfidf_r10 = summary_df['vs TF-IDF R@10'].str.rstrip('%').astype(float)
+        tfidf_p10 = summary_df['vs TF-IDF P@10'].astype(float)
+        tfidf_r10 = summary_df['vs TF-IDF R@10'].astype(float)
         
         all_better_p = (summary_df['P@10_num'] > tfidf_p10).all()
         all_better_r = (summary_df['R@10_num'] > tfidf_r10).all()
@@ -529,6 +569,43 @@ if all_results:
             print(f"   ✓ All models have higher Precision@10 than TF-IDF")
         if all_better_r:
             print(f"   ✓ All models have higher Recall@10 than TF-IDF")
+        
+        # Check for identical performance with high precision
+        print(f"\n🔍 Verifying model differences (high precision check)...")
+        p10_values = summary_df['P@10_num'].tolist()
+        r10_values = summary_df['R@10_num'].tolist()
+        
+        # Check with 6 decimal places
+        p10_values_precise = [round(v, 6) for v in p10_values]
+        r10_values_precise = [round(v, 6) for v in r10_values]
+        
+        if len(set(p10_values_precise)) < len(p10_values_precise):
+            print(f"  ⚠️  WARNING: Some models have identical Precision@10 values (within 6 decimal places)!")
+            from collections import defaultdict
+            value_to_models = defaultdict(list)
+            for i, val in enumerate(p10_values_precise):
+                value_to_models[val].append(summary_df.iloc[i]['Model'])
+            for val, models in value_to_models.items():
+                if len(models) > 1:
+                    print(f"    ⚠️  Models with P@10={val:.6f}: {', '.join(models)}")
+        else:
+            print(f"  ✓ All models have different Precision@10 values")
+            for i, val in enumerate(p10_values):
+                print(f"    {summary_df.iloc[i]['Model']}: {val:.6f} ({val*100:.4f}%)")
+        
+        if len(set(r10_values_precise)) < len(r10_values_precise):
+            print(f"\n  ⚠️  WARNING: Some models have identical Recall@10 values (within 6 decimal places)!")
+            from collections import defaultdict
+            value_to_models = defaultdict(list)
+            for i, val in enumerate(r10_values_precise):
+                value_to_models[val].append(summary_df.iloc[i]['Model'])
+            for val, models in value_to_models.items():
+                if len(models) > 1:
+                    print(f"    ⚠️  Models with R@10={val:.6f}: {', '.join(models)}")
+        else:
+            print(f"\n  ✓ All models have different Recall@10 values")
+            for i, val in enumerate(r10_values):
+                print(f"    {summary_df.iloc[i]['Model']}: {val:.6f} ({val*100:.4f}%)")
     
     print("\n" + "="*80)
     print("COMPARISON COMPLETE")

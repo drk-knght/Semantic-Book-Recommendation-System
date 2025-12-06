@@ -25,7 +25,7 @@ book_dataset.loc[:, "large_thumbnail"] = book_dataset["thumbnail"].apply(
 
 # Initialize embedding model (required for loading existing ChromaDB)
 embeddings = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-small-en-v1.5",
+    model_name="BAAI/bge-large-en-v1.5",
     model_kwargs={"device": "mps"},
     encode_kwargs={"normalize_embeddings": True}
 )
@@ -168,7 +168,7 @@ Enhanced Query:"""
         
         expansion_result = query_understanding_llm(
             expansion_prompt,
-            max_length=100,
+            max_length=250,
             num_return_sequences=1,
             do_sample=True,
             temperature=0.4,  # Slightly higher for more creative expansion
@@ -183,7 +183,7 @@ Enhanced Query:"""
         enhanced_query = enhanced_query.strip('"').strip("'")
         
         # Step 3: Create intent summary
-        intent_summary = intent_analysis[:200] if len(intent_analysis) > 200 else intent_analysis
+        intent_summary = intent_analysis[:1500] if len(intent_analysis) > 1500 else intent_analysis
         
         return {
             "original_query": user_query,
@@ -332,7 +332,7 @@ def generate_explanation(
     
     # Build the prompt for the LLM
     formatted_authors = format_author_names(authors)
-    description_preview = description[:2000] + "..." if len(description) > 2000 else description
+    description_preview = description[:800] + "..." if len(description) > 800 else description
     
     # Format emotion information
     emotion_info = ""

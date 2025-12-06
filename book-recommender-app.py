@@ -19,25 +19,15 @@ load_dotenv()
 
 # Load and preprocess book data
 book_dataset = pd.read_csv("books_with_emotions.csv")
-book_dataset.loc[:, "large_thumbnail"] = book_dataset["thumbnail"].apply(
-    lambda x: x + "&fife=w800" if pd.notna(x) else "cover-not-found.jpg"
-)
+book_dataset.loc[:, "large_thumbnail"] = book_dataset["thumbnail"].apply(lambda x: x + "&fife=w800" if pd.notna(x) else "cover-not-found.jpg")
 
-# Initialize embedding model (required for loading existing ChromaDB)
-embeddings = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-large-en-v1.5",
-    model_kwargs={"device": "mps"},
-    encode_kwargs={"normalize_embeddings": True}
-)
+# Initialize embedding model as it is required for loading existing ChromaDB
+embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-large-en-v1.5", model_kwargs={"device": "mps"}, encode_kwargs={"normalize_embeddings": True})
 
 # Load existing vector database from disk
 chroma_db_path = "./chroma_db"
 if os.path.exists(chroma_db_path) and os.listdir(chroma_db_path):
-    print("Loading existing vector database from disk...")
-    vector_store = Chroma(
-        persist_directory=chroma_db_path,
-        embedding_function=embeddings
-    )
+    vector_store = Chroma( persist_directory=chroma_db_path, embedding_function=embeddings)
     print(f"Vector database loaded successfully!")
 else:
     raise FileNotFoundError(
@@ -46,7 +36,7 @@ else:
     )
 
 # Initialize LLM for generating explanations and query understanding
-# Using Flan-T5-large model from HuggingFace (lightweight and efficient)
+# Using Flan-T5-large model from HuggingFace
 print("Loading LLM for explanations and query understanding...")
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 explanation_llm = None
@@ -54,11 +44,7 @@ query_understanding_llm = None
 
 try:
     device_id = 0 if device == "mps" else -1
-    explanation_llm = pipeline(
-        "text2text-generation",
-        model="google/flan-t5-large",
-        device=device_id
-    )
+    explanation_llm = pipeline("text2text-generation", model="google/flan-t5-large", device=device_id)
     # Use the same model for query understanding
     query_understanding_llm = explanation_llm
     print("Loaded Flan-T5-large model successfully!")
@@ -113,8 +99,8 @@ def understand_query(user_query: str) -> dict:
         
         return {
             "original_query": user_query,
-            "enhanced_query": user_query,  # Keep original if no LLM
-            "key_themes": key_words[:5],  # Top 5 keywords
+            "enhanced_query": user_query,  
+            "key_themes": key_words[:5],
             "intent_summary": f"Looking for books related to: {', '.join(key_words[:15])}"
         }
     
@@ -171,7 +157,7 @@ Enhanced Query:"""
             max_length=250,
             num_return_sequences=1,
             do_sample=True,
-            temperature=0.4,  # Slightly higher for more creative expansion
+            temperature=0.4, 
             top_p=0.9,
         )
         enhanced_query = expansion_result[0]["generated_text"].strip()
@@ -194,7 +180,7 @@ Enhanced Query:"""
         
     except Exception as e:
         print(f"Error in query understanding: {e}")
-        # Fallback to original query
+        # Fallback methof
         return {
             "original_query": user_query,
             "enhanced_query": user_query,
@@ -232,10 +218,8 @@ def find_similar_books(
     # Use enhanced query for search, but keep original for display
     search_query_for_embedding = enhanced_query
     
-    # Get results with similarity scores using the (potentially enhanced) query
-    similar_results_with_scores = vector_store.similarity_search_with_score(
-        search_query_for_embedding, k=candidate_count
-    )
+    # Get results with similarity scores using the enhanced query
+    similar_results_with_scores = vector_store.similarity_search_with_score(search_query_for_embedding, k=candidate_count)
     
     # Extract ISBNs and scores
     isbn_to_score = {}
@@ -245,9 +229,9 @@ def find_similar_books(
         try:
             isbn_int = int(isbn_str)
             isbn_codes.append(isbn_int)
-            # Convert distance to similarity (lower distance = higher similarity)
+            # Convert distance to similarity to get higher similarity, as it is the distance between the query and the book
             # ChromaDB returns distance, so we convert it
-            similarity_score = 1.0 / (1.0 + score)  # Simple conversion
+            similarity_score = 1.0 / (1.0 + score) 
             isbn_to_score[isbn_int] = similarity_score
         except ValueError:
             continue
@@ -367,15 +351,8 @@ Instructions:
 Detailed Explanation:"""
     
     try:
-        # Generate explanation using Flan-T5 with increased length for more verbose output
-        result = explanation_llm(
-            prompt,
-            max_length=250,  # Increased from 150 to allow more verbose explanations
-            num_return_sequences=1,
-            do_sample=True,
-            temperature=0.3,  # Slightly higher temperature for more varied and natural explanations
-            top_p=0.9,  # Add top_p for better quality
-        )
+        # Generated explanation using Flan-T5 for verbose output
+        result = explanation_llm(prompt,max_length=250,  num_return_sequences=1,do_sample=True,temperature=0.3, top_p=0.9)
         explanation = result[0]["generated_text"].strip()
         
         # Clean up the explanation if it contains the prompt text
@@ -474,7 +451,7 @@ def generate_recommendations(
         # Number of Pages
         if pd.notna(book_entry.get('num_pages')):
             pages = int(book_entry.get('num_pages'))
-            metadata_items.append(f"📄 **Pages:** {pages:,}")
+            metadata_items.append(f"**Pages:** {pages:,}")
         
         # Rating
         if pd.notna(book_entry.get('average_rating')):

@@ -5,3 +5,4 @@ chroma_db_all-mpnet-base-v2/
 chroma_db_bge-small-en-v1.5/
 chroma_db_TF-IDF/
 *.csv
+__pycache__/

@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
-Embedding Model Comparison Script
-=================================
 Compares multiple embedding models using fair evaluation framework.
 
-Key Features:
-- Ensemble ground truth: Combines keyword matches + semantic matches from ALL models
+Primary Objectives:
+- Ground truth: Combines keyword matches + semantic matches from ALL models
 - Fair comparison: All models contribute to ground truth, all evaluated equally
-- Robust ISBN extraction: Handles various document formats
-- Comprehensive metrics: Precision@5, Precision@10, Recall@5, Recall@10
-- Statistical significance testing
+- ISBN extraction: Handles various document formats
+- Metrics Evaluations: Precision@5, Precision@10, Recall@5, Recall@10
 """
 
 import os
@@ -27,13 +24,8 @@ import torch
 from scipy import stats
 import re
 
-print("=" * 80)
-print("EMBEDDING MODEL COMPARISON - FAIR EVALUATION")
-print("=" * 80)
 
-# ============================================================================
-# Configuration: Models to Compare
-# ============================================================================
+### Configuration: Embedding Models to Compare
 
 EMBEDDING_MODELS = {
     "bge-small-en-v1.5": {
@@ -65,55 +57,47 @@ QUERIES = {
     "family relationship": ["family", "father", "mother", "son", "daughter"],
 }
 
-# ============================================================================
-# Load Book Dataset
-# ============================================================================
+### Load Book Dataset
 
-print("\n📚 Loading book dataset...")
+print("\nLoading book dataset...")
 book_dataset = pd.read_csv("books_with_emotions.csv")
-print(f"✓ Loaded {len(book_dataset)} books")
+print(f"Loaded {len(book_dataset)} books")
 
 # Prepare TF-IDF baseline (same for all models)
 books_tfidf = book_dataset[book_dataset['description'].notna()].copy()
-books_tfidf['text'] = (books_tfidf['title'].fillna('') + ' ' + 
-                       books_tfidf['description'].fillna('') + ' ' +
-                       books_tfidf['categories'].fillna(''))
+books_tfidf['text'] = (books_tfidf['title'].fillna('') + ' ' + books_tfidf['description'].fillna('') + ' ' + books_tfidf['categories'].fillna(''))
 
 tfidf_vec = TfidfVectorizer(max_features=5000, stop_words='english', 
                             ngram_range=(1,2), min_df=2, max_df=0.8)
 tfidf_mat = tfidf_vec.fit_transform(books_tfidf['text'])
 
-# ============================================================================
-# Create Vector Databases for Each Model
-# ============================================================================
+
+### Create Vector Databases for Each Model
 
 def create_vector_database(model_key: str, model_config: Dict, book_descriptions_file: str = "book_descriptions.txt"):
-    """Create or load vector database for a specific embedding model"""
+    """Creates or loads vector database for a specific embedding model"""
     db_path = f"./chroma_db_{model_key}"
     
-    # Check if database already exists and has reasonable number of documents
+    # Checks if database already exists and has reasonable number of documents
     if os.path.exists(db_path) and os.listdir(db_path):
-        print(f"  ✓ Loading existing database for {model_key}...")
+        print(f"Loading existing database for {model_key}...")
         device = "mps" if torch.backends.mps.is_available() else "cpu"
         embeddings = HuggingFaceEmbeddings(
             model_name=model_config["model_name"],
             model_kwargs={"device": device},
             encode_kwargs={"normalize_embeddings": model_config["normalize"]}
         )
-        vector_store = Chroma(
-            persist_directory=db_path,
-            embedding_function=embeddings
-        )
+        vector_store = Chroma(persist_directory=db_path,embedding_function=embeddings)
         doc_count = vector_store._collection.count()
-        print(f"  ✓ Loaded {doc_count} documents")
+        print(f"Loaded {doc_count} documents")
         
-        # If database has very few documents, it's likely corrupted - recreate it
+        # If database has very few documents, it's corrupted so we have to recreate it 
         if doc_count < 100:
-            print(f"  ⚠️  Database has only {doc_count} documents, recreating...")
+            print(f"Database has only {doc_count} documents, recreating...")
             import shutil
             import time
             try:
-                # Close connections
+                # Closes connections
                 del vector_store
                 time.sleep(0.5)
                 shutil.rmtree(db_path)
@@ -125,12 +109,12 @@ def create_vector_database(model_key: str, model_config: Dict, book_descriptions
         else:
             return vector_store, embeddings
     
-    # Create new database
-    print(f"  ⚙️  Creating new database for {model_key}...")
+    # Creates new database
+    print(f"    Creating new database for {model_key}...")
     print(f"     Model: {model_config['model_name']}")
     print(f"     This may take a few minutes...")
     
-    # Load documents with robust splitting
+    # Loads documents with robust splitting
     try:
         raw_docs = TextLoader(book_descriptions_file, encoding="utf-8").load()
         
@@ -144,16 +128,16 @@ def create_vector_database(model_key: str, model_config: Dict, book_descriptions
         
         # If splitting didn't work (only 1 document), use manual splitting
         if len(documents) <= 1 and len(raw_docs) > 0:
-            print(f"  ⚠️  Text splitter only created {len(documents)} document(s), using manual split...")
+            print(f"Text splitter only created {len(documents)} document(s), using manual split...")
             with open(book_descriptions_file, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             documents = [Document(page_content=line.strip(), metadata={}) for line in lines if line.strip()]
-            print(f"  ✓ Manually split into {len(documents)} documents")
+            print(f"Manually split into {len(documents)} documents")
         
-        print(f"  ✓ Loaded {len(documents)} documents")
+        print(f"Loaded {len(documents)} documents")
         
     except Exception as e:
-        print(f"  ❌ Error loading documents: {e}")
+        print(f"  Error loading documents: {e}")
         raise
     
     # Initialize embeddings
@@ -165,18 +149,18 @@ def create_vector_database(model_key: str, model_config: Dict, book_descriptions
     )
     
     # Create vector database
-    print(f"  ⚙️  Generating embeddings (this may take a while)...")
+    print(f"   Generating embeddings (this may take a while)...")
     vector_store = Chroma.from_documents(
         documents=documents,
         embedding=embeddings,
         persist_directory=db_path
     )
-    print(f"  ✓ Database created for {model_key} ({vector_store._collection.count()} documents)")
+    print(f"Database created for {model_key} ({vector_store._collection.count()} documents)")
     return vector_store, embeddings
 
-# ============================================================================
-# Robust ISBN Extraction
-# ============================================================================
+
+
+### ISBN Extraction Function
 
 def extract_isbn_from_content(content: str) -> int:
     """Extract ISBN from document content with robust parsing"""
@@ -216,9 +200,9 @@ def extract_isbn_from_content(content: str) -> int:
     
     return None
 
-# ============================================================================
-# Search Functions
-# ============================================================================
+
+
+### Semantic Search Function
 
 def semantic_search(query: str, vector_store, k: int = 10) -> List[int]:
     """
@@ -250,9 +234,9 @@ def tfidf_search(query: str, k: int = 10) -> List[int]:
     sims = cosine_similarity(qvec, tfidf_mat).flatten()
     return books_tfidf.iloc[sims.argsort()[-k:][::-1]]['isbn13'].tolist()
 
-# ============================================================================
-# Generate Ensemble Ground Truth (FAIR for all models)
-# ============================================================================
+
+
+### Generate Ensemble Ground Truth Function (FAIR for all models)
 
 def generate_keyword_ground_truth(query: str, keywords: List[str], top_n: int = 60) -> Set[int]:
     """Generate keyword-based ground truth"""
@@ -267,16 +251,10 @@ def generate_keyword_ground_truth(query: str, keywords: List[str], top_n: int = 
     keyword_books.sort(key=lambda x: x[1], reverse=True)
     return set([isbn for isbn, _ in keyword_books[:top_n]])
 
-def generate_ensemble_ground_truth(query: str, keywords: List[str], 
-                                   all_vector_stores: Dict[str, Chroma],
-                                   semantic_top_k: int = 5) -> Set[int]:
+def generate_ensemble_ground_truth(query: str, keywords: List[str], all_vector_stores: Dict[str, Chroma], semantic_top_k: int = 5) -> Set[int]:
     """
     Generate ensemble ground truth that includes semantic matches from ALL models.
     This ensures fair comparison - all models contribute to ground truth.
-    
-    NOTE: This method includes semantic results from all models being evaluated,
-    which can create a circular dependency. However, it ensures all models are
-    evaluated against the same comprehensive ground truth.
     """
     # Part 1: Keyword-based matches (fair for all)
     keyword_isbns = generate_keyword_ground_truth(query, keywords, top_n=60)
@@ -306,9 +284,9 @@ def generate_ensemble_ground_truth(query: str, keywords: List[str],
     # both obvious keyword matches and semantic matches from all models
     return keyword_isbns | semantic_isbns
 
-# ============================================================================
-# Metrics
-# ============================================================================
+
+
+### Metrics Functions
 
 def precision_at_k(retrieved: List[int], relevant: Set[int], k: int) -> float:
     """Calculate Precision@K"""
@@ -324,9 +302,9 @@ def recall_at_k(retrieved: List[int], relevant: Set[int], k: int) -> float:
     retrieved_k = set(retrieved[:k])
     return len(retrieved_k & relevant) / len(relevant)
 
-# ============================================================================
-# Evaluation for Each Model
-# ============================================================================
+
+
+### Evaluation Function for Each Model
 
 def evaluate_model(model_key: str, model_config: Dict, ground_truth: Dict[str, Set[int]]) -> pd.DataFrame:
     """Evaluate a single embedding model"""
@@ -340,7 +318,7 @@ def evaluate_model(model_key: str, model_config: Dict, ground_truth: Dict[str, S
     vector_store, embeddings = create_vector_database(model_key, model_config)
     
     # Run evaluation using shared ground truth
-    print(f"\n🔍 Running evaluation (using ensemble ground truth)...")
+    print(f"\nRunning evaluation...")
     results = []
     
     for query, gt in ground_truth.items():
@@ -388,7 +366,7 @@ def evaluate_model(model_key: str, model_config: Dict, ground_truth: Dict[str, S
     improvement_p = ((sem_p10_avg - tfidf_p10_avg) / tfidf_p10_avg * 100) if tfidf_p10_avg > 0 else 0
     improvement_r = ((sem_r10_avg - tfidf_r10_avg) / tfidf_r10_avg * 100) if tfidf_r10_avg > 0 else 0
     
-    print(f"\n📈 Results for {model_key}:")
+    print(f"\n Results for {model_key}:")
     print(f"   Precision@10: {sem_p10_avg:.3f} ({sem_p10_avg:.2%}) vs TF-IDF: {tfidf_p10_avg:.3f} ({tfidf_p10_avg:.2%}), improvement: {improvement_p:+.2f}%")
     print(f"   Recall@10:    {sem_r10_avg:.3f} ({sem_r10_avg:.2%}) vs TF-IDF: {tfidf_r10_avg:.3f} ({tfidf_r10_avg:.2%}), improvement: {improvement_r:+.2f}%")
     
@@ -398,23 +376,18 @@ def evaluate_model(model_key: str, model_config: Dict, ground_truth: Dict[str, S
     
     return df
 
-# ============================================================================
-# Main Comparison
-# ============================================================================
 
-print("\n" + "="*80)
+
+### Main Comparison Function
+
+
 print("STARTING EMBEDDING MODEL COMPARISON")
-print("="*80)
 print(f"\nModels to compare: {len(EMBEDDING_MODELS)}")
 for key, config in EMBEDDING_MODELS.items():
     print(f"  - {key}: {config['description']}")
 
-print(f"\n⚠️  NOTE: Using ENSEMBLE ground truth (keyword + semantic from ALL models)")
-print(f"⚠️  NOTE: Query understanding is DISABLED to test embedding models only")
-print(f"⚠️  NOTE: All models should outperform TF-IDF baseline")
-
 # Step 1: Create all vector databases first
-print("\n" + "="*80)
+
 print("STEP 1: Creating/loading vector databases for all models")
 print("="*80)
 all_vector_stores = {}
@@ -423,41 +396,41 @@ for model_key, model_config in EMBEDDING_MODELS.items():
         vector_store, _ = create_vector_database(model_key, model_config)
         all_vector_stores[model_key] = vector_store
     except Exception as e:
-        print(f"\n❌ Error creating database for {model_key}: {e}")
+        print(f"\nError creating database for {model_key}: {e}")
         import traceback
         traceback.print_exc()
         print("   Skipping this model...")
         continue
 
 if not all_vector_stores:
-    print("\n❌ No vector databases were successfully created!")
+    print("\nNo vector databases were successfully created!")
     exit(1)
 
-# Step 2: Generate ensemble ground truth
-print("\n" + "="*80)
-print("STEP 2: Generating ensemble ground truth (fair for all models)")
+# Step 2: Generate ground truth
+print("\n\n")
+print("STEP 2: Generating ground truth for all models")
 print("="*80)
 ground_truth = {}
 for query, keywords in QUERIES.items():
     gt = generate_ensemble_ground_truth(query, keywords, all_vector_stores, semantic_top_k=5)
     ground_truth[query] = gt
-    print(f"✓ {query[:40]:<40} | {len(gt)} books (keyword + semantic from all models)")
+    print(f"{query[:40]:<40} | {len(gt)} books (keyword + semantic from all models)")
 
 # Step 3: Evaluate each model
-print("\n" + "="*80)
+print("\n\n")
 print("STEP 3: Evaluating all models")
 print("="*80)
 
 all_results = []
 for model_key, model_config in EMBEDDING_MODELS.items():
     if model_key not in all_vector_stores:
-        print(f"\n⚠️  Skipping {model_key} (database not available)")
+        print(f"\nSkipping {model_key} (database not available)")
         continue
     try:
         df = evaluate_model(model_key, model_config, ground_truth)
         all_results.append(df)
     except Exception as e:
-        print(f"\n❌ Error evaluating {model_key}: {e}")
+        print(f"\nError evaluating {model_key}: {e}")
         import traceback
         traceback.print_exc()
         print("   Skipping this model...")
@@ -469,7 +442,7 @@ if all_results:
     
     # Save detailed results
     combined_df.to_csv('embedding_model_comparison_results.csv', index=False)
-    print(f"\n✓ Detailed results saved: embedding_model_comparison_results.csv")
+    print(f"\nDetailed results saved: embedding_model_comparison_results.csv")
     
     # Calculate summary statistics
     print("\n" + "="*80)
@@ -520,7 +493,7 @@ if all_results:
     
     # Save summary
     summary_df.to_csv('embedding_model_comparison_summary.csv', index=False)
-    print(f"\n✓ Summary saved: embedding_model_comparison_summary.csv")
+    print(f"\nSummary saved: embedding_model_comparison_summary.csv")
     
     # Find best model
     if len(summary_df) > 0:
@@ -536,16 +509,16 @@ if all_results:
         best_r_idx = summary_df['R@10_num'].idxmax()
         best_r_model = summary_df.loc[best_r_idx]
         
-        print(f"\n🏆 Best Model by Precision@10: {best_p_model['Model']} ({best_p_model['Model Name']})")
+        print(f"\n Best Model by Precision@10: {best_p_model['Model']} ({best_p_model['Model Name']})")
         print(f"   Precision@10: {best_p_model['P@10']} ({best_p_model['P@10_pct']})")
         print(f"   Improvement: {best_p_model['P@10 Improvement']}")
         
-        print(f"\n🏆 Best Model by Recall@10: {best_r_model['Model']} ({best_r_model['Model Name']})")
+        print(f"\n Best Model by Recall@10: {best_r_model['Model']} ({best_r_model['Model Name']})")
         print(f"   Recall@10: {best_r_model['R@10']} ({best_r_model['R@10_pct']})")
         print(f"   Improvement: {best_r_model['R@10 Improvement']}")
         
         # Show differences between models
-        print(f"\n📊 Model Differences:")
+        print(f"\nModel Differences:")
         for i, row1 in summary_df.iterrows():
             for j, row2 in summary_df.iterrows():
                 if i < j:
@@ -564,11 +537,6 @@ if all_results:
         all_better_r = (summary_df['R@10_num'] > tfidf_r10).all()
         all_better = all_better_p and all_better_r
         
-        print(f"\n{'✅' if all_better else '⚠️ '} All embedding models {'outperform' if all_better else 'do not all outperform'} TF-IDF baseline")
-        if all_better_p:
-            print(f"   ✓ All models have higher Precision@10 than TF-IDF")
-        if all_better_r:
-            print(f"   ✓ All models have higher Recall@10 than TF-IDF")
         
         # Check for identical performance with high precision
         print(f"\n🔍 Verifying model differences (high precision check)...")
@@ -580,30 +548,30 @@ if all_results:
         r10_values_precise = [round(v, 6) for v in r10_values]
         
         if len(set(p10_values_precise)) < len(p10_values_precise):
-            print(f"  ⚠️  WARNING: Some models have identical Precision@10 values (within 6 decimal places)!")
+            print(f"WARNING: Some models have identical Precision@10 values (within 6 decimal places)!")
             from collections import defaultdict
             value_to_models = defaultdict(list)
             for i, val in enumerate(p10_values_precise):
                 value_to_models[val].append(summary_df.iloc[i]['Model'])
             for val, models in value_to_models.items():
                 if len(models) > 1:
-                    print(f"    ⚠️  Models with P@10={val:.6f}: {', '.join(models)}")
+                    print(f"Models with P@10={val:.6f}: {', '.join(models)}")
         else:
-            print(f"  ✓ All models have different Precision@10 values")
+            print(f"All models have different Precision@10 values")
             for i, val in enumerate(p10_values):
                 print(f"    {summary_df.iloc[i]['Model']}: {val:.6f} ({val*100:.4f}%)")
         
         if len(set(r10_values_precise)) < len(r10_values_precise):
-            print(f"\n  ⚠️  WARNING: Some models have identical Recall@10 values (within 6 decimal places)!")
+            print(f"\nWARNING: Some models have identical Recall@10 values (within 6 decimal places)!")
             from collections import defaultdict
             value_to_models = defaultdict(list)
             for i, val in enumerate(r10_values_precise):
                 value_to_models[val].append(summary_df.iloc[i]['Model'])
             for val, models in value_to_models.items():
                 if len(models) > 1:
-                    print(f"    ⚠️  Models with R@10={val:.6f}: {', '.join(models)}")
+                    print(f"Models with R@10={val:.6f}: {', '.join(models)}")
         else:
-            print(f"\n  ✓ All models have different Recall@10 values")
+            print(f"\nAll models have different Recall@10 values")
             for i, val in enumerate(r10_values):
                 print(f"    {summary_df.iloc[i]['Model']}: {val:.6f} ({val*100:.4f}%)")
     
@@ -611,4 +579,4 @@ if all_results:
     print("COMPARISON COMPLETE")
     print("="*80)
 else:
-    print("\n❌ No models were successfully evaluated!")
+    print("\nNo models were successfully evaluated!")
